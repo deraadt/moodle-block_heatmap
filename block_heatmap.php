@@ -164,7 +164,7 @@ class block_heatmap extends block_base {
             if ($useinternalreader) {
                 // If new log table has older data then don't use the minimum time obtained from the legacy table.
                 if (empty($minlog) || ($minloginternalreader <= $minlog)) {
-                    $minlog = $minloginternalreader;
+                    $uselegacyreader = false;
                 }
             }
 
@@ -186,12 +186,17 @@ class block_heatmap extends block_base {
                          WHERE cm.course = :courseid
                            AND $logactionlike
                            AND m.visible = :visible $limittime
+                           AND l.time > :lastcached
                       GROUP BY cm.id";
-                $params = array('courseid' => $COURSE->id, 'action' => 'view%', 'visible' => 1);
+                $params = array('courseid' => $COURSE->id, 'action' => 'view%', 'visible' => 1, 'lastcached' => $lastcached);
                 if (!empty($minloginternalreader)) {
                     $params['timeto'] = $minloginternalreader;
                 }
-                $views = $DB->get_records_sql($sql, $params);
+                $rs = $DB->get_recordset_sql($sql, $params);
+                $views = array();
+                foreach ($rs as $key => $record) {
+                    $views[$key] = $record;
+                }
             }
 
             // Get record from sql_internal_table_reader and merge with records obtained from legacy log (if needed).
@@ -202,9 +207,14 @@ class block_heatmap extends block_base {
                            AND anonymous = 0
                            AND crud = 'r'
                            AND contextlevel = :contextmodule
+                           AND timecreated > :lastcached
                       GROUP BY contextinstanceid";
-                $params = array('courseid' => $COURSE->id, 'contextmodule' => CONTEXT_MODULE);
-                $v = $DB->get_records_sql($sql, $params);
+                $params = array('courseid' => $COURSE->id, 'contextmodule' => CONTEXT_MODULE, 'lastcached' => $lastcached);
+                $rs = $DB->get_recordset_sql($sql, $params);
+                $v = array();
+                foreach ($rs as $key => $record) {
+                    $v[$key] = $record;
+                }
                 if (empty($views)) {
                     $views = $v;
                 } else {
